@@ -22,7 +22,7 @@ require 'json'
 require 'tempfile'
 require 'netaddr'
 
-require_relative "udp_ping"
+require_relative File.join(ENV['RBDIR'].nil? ? '/usr/lib/redborder' : ENV['RBDIR'],'lib/udp_ping')
 
 SERVER_LISTEN_PORT = 8070
 RANDOM_STR=rand(36**32).to_s(36)

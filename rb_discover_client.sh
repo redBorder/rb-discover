@@ -1,6 +1,7 @@
 #!/bin/bash
 
-source /etc/profile.f/rvm.sh
+source /etc/profile.d/redborder-common.sh
+source /etc/profile.d/rvm.sh
 
 rvm gemset use rb-discover
 

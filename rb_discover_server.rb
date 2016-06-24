@@ -20,7 +20,7 @@ require 'yaml'
 require 'json'
 #require 'system/getifaddrs' 
 
-require_relative 'udp_ping'
+require File.join(ENV['RBDIR'].nil? ? '/usr/lib/redborder' : ENV['RBDIR'],'lib/udp_ping')
 
 cdomain = File.read("/etc/redborder/cdomain").split("\n").first if File.exist?"/etc/redborder/cdomain"
 cdomain="redborder.cluster" if cdomain.nil? or cdomain==""
