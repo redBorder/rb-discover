@@ -1,0 +1,9 @@
+[Unit]
+Description=redborder discovery service
+
+[Service]
+ExecStart=/usr/lib/redborder/bin/rb_discover_start.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

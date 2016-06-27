@@ -9,7 +9,7 @@ License: AGPL 3.0
 URL: https://github.com/redBorder/rb-discover
 Source0: %{name}-%{version}.tar.gz
 
-Requires: bash rvm
+Requires: bash rvm redborder-common
 
 %description
 %{summary}
@@ -20,21 +20,22 @@ Requires: bash rvm
 %build
 
 %install
-mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/%{__rbdir}/bin
 mkdir -p %{buildroot}/%{__rbdir}/lib
 install -D -m 0755 rb_discover_server.rb %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_client.rb %{buildroot}/%{__rbdir}/bin
 install -D -m 0644 udp_ping.rb %{buildroot}/%{__rbdir}/lib
-install -D -m 0644 rb_discover_server.sh %{buildroot}/%{_bindir} 
-install -D -m 0644 rb_discover_client.sh %{buildroot}/%{_bindir} 
+install -D -m 0755 rb_discover_server.sh %{buildroot}/%{__rbdir}/bin
+install -D -m 0755 rb_discover_client.sh %{buildroot}/%{__rbdir}/bin
+install -D -m 0755 rb_discover_start.sh %{buildroot}/%{__rbdir}/bin
+install -D -m 0644 rb-discover.service %{buildroot}/usr/lib/systemd/system/rb-discover.service
 
 %files
 %defattr(0755,root,root)
 %{__rbdir}/bin
-%{_bindir}
 %defattr(0644,root,root)
 %{__rbdir}/lib
+/usr/lib/systemd/system/rb-discover.service
 %doc
 
 %changelog
