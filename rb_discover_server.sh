@@ -5,4 +5,4 @@ source /etc/profile.d/rvm.sh
 
 rvm gemset use rb-discover
 
-rb_discover_server.rb $*
+exec rb_discover_server.rb $*

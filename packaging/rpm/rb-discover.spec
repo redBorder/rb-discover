@@ -3,6 +3,7 @@
 Name: rb-discover
 Version: %{__version}
 Release: %{__release}%{?dist}
+BuildArch: noarch
 Summary: Package for rb-discover project
 
 License: AGPL 3.0
@@ -29,6 +30,20 @@ install -D -m 0755 rb_discover_server.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_client.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_start.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0644 rb-discover.service %{buildroot}/usr/lib/systemd/system/rb-discover.service
+
+%pre
+getent group rb-discover >/dev/null || groupadd -r rb-discover
+getent passwd rb-discover >/dev/null || \
+    useradd -r -g rb-discover -d / -s /sbin/nologin \
+    -c "User of rb-discover service" rb-discover
+exit 0
+
+%post
+if [ ! -d /var/log/rb-discover ]; then
+	mkdir -p /var/log/rb-discover
+	chown -R rb-discover:rb-discover /var/log/rb-discover
+fi
+
 
 %files
 %defattr(0755,root,root)
