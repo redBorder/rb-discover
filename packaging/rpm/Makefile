@@ -1,4 +1,4 @@
-PACKAGE_NAME?=	redborder-common
+PACKAGE_NAME?=	rb-discover
 
 VERSION?=	$(shell git describe --abbrev=6 --tags HEAD --always | sed 's/-/_/g')
 
