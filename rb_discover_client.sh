@@ -3,6 +3,6 @@
 source /etc/profile.d/redborder-common.sh
 source /etc/profile.d/rvm.sh
 
-rvm gemset use rb-discover
+rvm gemset use default
 
 exec rb_discover_client.rb $*

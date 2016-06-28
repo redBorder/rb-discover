@@ -23,18 +23,20 @@ function usage(){
   echo "$0 <manager_ip> <mode> [<identity_file>] "
 }
 
-[ -f /opt/rb/etc/rb_sysconf.conf ] && source /opt/rb/etc/rb_sysconf.conf
-source /opt/rb/bin/rb_sysconf_common
-source /opt/rb/bin/rb_sysconf_base
-source /opt/rb/bin/rb_sysconf_system
+#[ -f /opt/rb/etc/rb_sysconf.conf ] && source /opt/rb/etc/rb_sysconf.conf
+#source /opt/rb/bin/rb_sysconf_common
+#source /opt/rb/bin/rb_sysconf_base
+#source /opt/rb/bin/rb_sysconf_system
+#
+#f_sys_init
+#
+#if [ "x$manager" != "x" -a "x$mode" != "x" ]; then
+#  sys_ip_rb_manager=$join_cluster
+#  #LANG=C /bin/date > /opt/rb/etc/cluster-installed.txt
+#  f_sys_rb_register $manager $mode $rsakey
+#else
+#  usage
+#fi
 
-f_sys_init
-
-if [ "x$manager" != "x" -a "x$mode" != "x" ]; then
-  sys_ip_rb_manager=$join_cluster
-  #LANG=C /bin/date > /opt/rb/etc/cluster-installed.txt
-  f_sys_rb_register $manager $mode $rsakey
-else
-  usage
-fi
-
+echo "f_sys_rb_register $manager $mode $rsakey"
+logger "f_sys_rb_register $manager $mode $rsakey"

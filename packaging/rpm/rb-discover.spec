@@ -30,6 +30,8 @@ install -D -m 0755 rb_discover_server.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_client.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_start.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0644 rb-discover.service %{buildroot}/usr/lib/systemd/system/rb-discover.service
+install -D -m 0755 rb_cluster_register.sh %{buildroot}/%{__rbdir}/bin
+install -D -m 0755 rb_configure_master.sh %{buildroot}/%{__rbdir}/bin
 
 %pre
 getent group rb-discover >/dev/null || groupadd -r rb-discover
@@ -43,7 +45,6 @@ if [ ! -d /var/log/rb-discover ]; then
 	mkdir -p /var/log/rb-discover
 	chown -R rb-discover:rb-discover /var/log/rb-discover
 fi
-
 
 %files
 %defattr(0755,root,root)
