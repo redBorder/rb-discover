@@ -59,51 +59,52 @@ if opt["o"]
 end
 
 thread = UDPPing.start_service_announcer(port) do |client_msg, client_ip|
-  if client_ip!=local_client_ip and !client_msg.nil? 
-    begin 
-      client_data = JSON.parse(client_msg)
-    rescue Exception => e  
-      client_data = {}
-    end
-    
-    answer=config["answer"].clone
-    answer["installed"] = File.exist?"/etc/redborder/cluster-installed.txt"
-    answer["master"]    = File.exist?"/etc/redborder/master.lock"
-    if answer["private_rsa"].nil? or answer["chef_server"].nil? or !answer["installed"]
-      answer["ready"] = false 
-    else
-      answer["ready"] = true
-    end
-     
-    if (!client_data["only_ready"] or (client_data["only_ready"] and (answer["master"] or answer["installed"] or answer["ready"])))
-      if ( client_data["cdomain"].nil? or client_data["cdomain"].chomp == "" or client_data["cdomain"].chomp == cdomain )
-        answer["client"]     = client_ip
-        answer["client_msg"] = client_msg
-        #default mode for the client
-        if File.exists?'/etc/redborder/manager_mode'
-          answer["mode"] = File.open('/etc/redborder/manager_mode', &:readline).strip 
-        elsif File.exists?'/etc/chef/initialrole'
-          answer["mode"] = File.open('/etc/chef/initialrole', &:readline).strip 
-        else
-          answer["mode"] = "corezk"
+    if client_ip!=local_client_ip and !client_msg.nil? 
+        begin 
+            client_data = JSON.parse(client_msg)
+        rescue Exception => e  
+            client_data = {}
         end
-        answer["mode"] = "corezk" if answer["mode"].nil?
-        p "New redBorder client #{client_ip} (msg: #{client_msg})"
-        ret=answer
-      else
-        p "ERROR: The client #{client_ip} is not allowed because it asks for other cluster domain (#{client_data["cdomain"]}) different than the server one (#{cdomain})"
-        ret=nil
-      end
+        
+        answer=config["answer"].clone
+        answer["installed"] = File.exist?"/etc/redborder/cluster-installed.txt"
+        answer["master"]    = File.exist?"/etc/redborder/master.lock"
+        if answer["private_rsa"].nil? or answer["chef_server"].nil? or !answer["installed"]
+            answer["ready"] = false 
+        else
+            answer["ready"] = true
+        end
+         
+        if (!client_data["only_ready"] or (client_data["only_ready"] and (answer["master"] or answer["installed"] or answer["ready"])))
+            if ( client_data["cdomain"].nil? or client_data["cdomain"].chomp == "" or client_data["cdomain"].chomp == cdomain )
+                answer["client"]     = client_ip
+                answer["client_msg"] = client_msg
+                #default mode for the client
+                if File.exists?'/etc/redborder/manager_mode'
+                    answer["mode"] = File.open('/etc/redborder/manager_mode', &:readline).strip 
+                elsif File.exists?'/etc/chef/initialrole'
+                    answer["mode"] = File.open('/etc/chef/initialrole', &:readline).strip 
+                else
+                    answer["mode"] = "corezk"
+                end
+                answer["mode"] = "corezk" if answer["mode"].nil?
+                p "New redBorder client #{client_ip} (msg: #{client_msg})"
+                ret=answer
+            else
+                p "ERROR: The client #{client_ip} is not allowed because it asks for other cluster domain (#{client_data["cdomain"]}) different than the server one (#{cdomain})"
+                ret=nil
+            end
+        else
+            p "ERROR: The client #{client_ip} is not allowed because this server is not ready -> master:#{answer["master"]}; installed:#{answer["installed"]}; ready:#{answer["ready"]}"
+            ret=nil
+        end
     else
-      p "ERROR: The client #{client_ip} is not allowed because this server is not ready -> master:#{answer["master"]}; installed:#{answer["installed"]}; ready:#{answer["ready"]}"
-      ret=nil
+        p "ERROR: Local client is not allowed (#{client_ip})"
+        ret=nil
     end
-  else
-    p "ERROR: Local client is not allowed (#{client_ip})"
-    ret=nil
-  end
-  ret
+    ret
 end
 
 thread.join
 
+## vim:ts=4:sw=4:expandtab:ai:nowrap:formatoptions=croqln:
