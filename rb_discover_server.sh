@@ -1,8 +1,7 @@
 #!/bin/bash
 
-source /etc/profile.d/redborder-common.sh
-source /etc/profile.d/rvm.sh
+source /etc/profile
 
-rvm gemset use default
+rvm gemset use default &>/dev/null
 
 exec rb_discover_server.rb $*

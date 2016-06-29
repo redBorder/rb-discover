@@ -29,7 +29,7 @@ install -D -m 0644 udp_ping.rb %{buildroot}/%{__rbdir}/lib
 install -D -m 0755 rb_discover_server.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_client.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_discover_start.sh %{buildroot}/%{__rbdir}/bin
-install -D -m 0644 rb-discover.service %{buildroot}/usr/lib/systemd/system/rb-discover.service
+install -D -m 0644 rb-discover.service %{buildroot}/%{_unitdir}/rb-discover.service
 install -D -m 0755 rb_cluster_register.sh %{buildroot}/%{__rbdir}/bin
 install -D -m 0755 rb_configure_master.sh %{buildroot}/%{__rbdir}/bin
 
@@ -49,9 +49,10 @@ fi
 %files
 %defattr(0755,root,root)
 %{__rbdir}/bin
-%defattr(0644,root,root)
 %{__rbdir}/lib
-/usr/lib/systemd/system/rb-discover.service
+%defattr(0644,root,root)
+%{__rbdir}/lib/udp_ping.rb
+%{_unitdir}/rb-discover.service
 %doc
 
 %changelog
