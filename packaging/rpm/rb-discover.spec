@@ -45,6 +45,19 @@ if [ ! -d /var/log/rb-discover ]; then
 	mkdir -p /var/log/rb-discover
 	chown -R rb-discover:rb-discover /var/log/rb-discover
 fi
+exit 0
+
+%preun
+if [ $1 -eq 0 ]; then           # uninstall
+	service rb-discover stop >/dev/null 2>&1
+fi
+exit 0
+
+%postun
+if [ $1 -ge 1 ]; then           # upgrade
+	service rb-discover restart >/dev/null 2>&1
+fi
+exit 0
 
 %files
 %defattr(0755,root,root)
@@ -52,7 +65,7 @@ fi
 %{__rbdir}/lib
 %defattr(0644,root,root)
 %{__rbdir}/lib/udp_ping.rb
-%{_unitdir}/rb-discover.service
+/%{_unitdir}/rb-discover.service
 %doc
 
 %changelog
