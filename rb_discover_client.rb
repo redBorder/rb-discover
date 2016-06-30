@@ -21,6 +21,7 @@ require 'yaml'
 require 'json' 
 require 'tempfile'
 require 'netaddr'
+require 'symmetric-encryption'
 
 require File.join(ENV['RBDIR'].nil? ? '/usr/lib/redborder' : ENV['RBDIR'],'lib/udp_ping')
 
@@ -28,6 +29,15 @@ SERVER_LISTEN_PORT = 8070
 RANDOM_STR=rand(36**32).to_s(36)
 CLUSTERFILE="/etc/redborder/cluster-installed.txt"
 CLIENTPEM="/etc/chef/client.pem"
+USERDATA="/var/lib/cloud/instance/user-data.txt"
+
+if File.exist?USERDATA
+    File.open(USERDATA).each do |line|
+        unless line.match(/^\s*DISCOVER_KEY=(?<key>[^\s]*)\s*$/).nil?
+            SymmetricEncryption.cipher = SymmetricEncryption::Cipher.new(:key=>line.match(/^\s*DISCOVER_KEY=(?<key>[^\s]*)\s*$/)[:key],:cipher_name => 'aes-128-cbc')
+        end
+    end
+end
 
 cdomain = File.read("/etc/redborder/cdomain").split("\n").first if File.exist?"/etc/redborder/cdomain"
 cdomain="redborder.cluster" if cdomain.nil? or cdomain==""
@@ -48,7 +58,7 @@ usage if opt["h"]
 config=opt["c"]
 
 if opt["c"] and File.exists?CLUSTERFILE and File.exists?CLIENTPEM and opt["f"].nil?
-    p "This instance is already configured!!"
+    p "This node is already configured!!"
     exit 1
 end
 

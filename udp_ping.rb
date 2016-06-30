@@ -9,7 +9,11 @@ module UDPPing
     
     def self.answer_client(ip, port, response)
         s = UDPSocket.new
-        s.send(Marshal.dump(response), 0, ip, port)
+        if SymmetricEncryption.cipher?
+            s.send(SymmetricEncryption.encrypt(Marshal.dump(response)), 0, ip, port)
+        else
+            s.send(Marshal.dump(response), 0, ip, port)
+        end
         s.close
     end
     
@@ -19,20 +23,29 @@ module UDPPing
             s.bind('0.0.0.0', server_udp_port)
             
             loop do
-              body, sender = s.recvfrom(@buffer_size)
-              data = Marshal.load(body)
-              client_ip   = sender[3]
-              client_port = data[:reply_port]
-              response = code.call(data[:content], client_ip)
-            
-              if response
-                begin
-                  answer_client(client_ip, client_port, response)
-                rescue
-                  # Make sure thread does not crash
+                body, sender = s.recvfrom(@buffer_size)
+                client_ip = sender[3]
+                if SymmetricEncryption.cipher?
+                    begin
+                        data = Marshal.load(SymmetricEncryption.decrypt(body))
+                    rescue Exception => e
+                        s.close
+                        raise "Error decrypting message from client #{client_ip}: #{e.message}"
+                    end
+                else
+                    data = Marshal.load(body)
                 end
-              end
+                client_port = data[:reply_port]
+                response = code.call(data[:content], client_ip)
+                if response
+                    begin
+                        answer_client(client_ip, client_port, response)
+                    rescue
+                        # Make sure thread does not crash
+                    end
+                end
             end
+
         end
     end
     
@@ -42,7 +55,11 @@ module UDPPing
         
         s = UDPSocket.new
         s.setsockopt(Socket::SOL_SOCKET, Socket::SO_BROADCAST, true)
-        s.send(Marshal.dump(body), 0, broadcast, udp_port)
+        if SymmetricEncryption.cipher?
+            s.send(SymmetricEncryption.encrypt(Marshal.dump(body)), 0, broadcast, udp_port)
+        else
+            s.send(Marshal.dump(body), 0, broadcast, udp_port)
+        end
         s.close
     end
     
@@ -54,7 +71,16 @@ module UDPPing
             begin
                 body, sender = timeout(time_out) { s.recvfrom(@buffer_size) }
                 server_ip = sender[3]
-                data = Marshal.load(body)
+                if SymmetricEncryption.cipher?
+                    begin
+                        data = Marshal.load(SymmetricEncryption.decrypt(body))
+                    rescue Exception => e
+                        s.close
+                        raise "Error decrypting message from server #{server_ip}: #{e.message}"
+                    end
+                else
+                    data = Marshal.load(body)
+                end
                 code.call(data, server_ip)
                 s.close
             rescue Timeout::Error
