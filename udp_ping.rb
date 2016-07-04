@@ -30,7 +30,8 @@ module UDPPing
                         data = Marshal.load(SymmetricEncryption.decrypt(body))
                     rescue Exception => e
                         s.close
-                        raise "Error decrypting message from client #{client_ip}: #{e.message}"
+                        p "Error decrypting message from client #{client_ip}: #{e.message}"
+                        next
                     end
                 else
                     data = Marshal.load(body)
@@ -72,20 +73,24 @@ module UDPPing
                 body, sender = timeout(time_out) { s.recvfrom(@buffer_size) }
                 server_ip = sender[3]
                 if SymmetricEncryption.cipher?
-                    begin
-                        data = Marshal.load(SymmetricEncryption.decrypt(body))
-                    rescue Exception => e
-                        s.close
-                        raise "Error decrypting message from server #{server_ip}: #{e.message}"
-                    end
+                    data = Marshal.load(SymmetricEncryption.decrypt(body))
                 else
                     data = Marshal.load(body)
                 end
                 code.call(data, server_ip)
                 s.close
-            rescue Timeout::Error
+            rescue StandardError => e
+                case e.class.to_s
+                    when "Timeout::Error"
+                        p "Error: Timeout conneting to server #{server_ip}: #{e.message}"
+                    when "OpenSSL::Cipher::CipherError"
+                        p "Error decrypting message from server #{server_ip}: #{e.message}"
+                    else
+                        p "Error: #{e.message}"
+                end
                 s.close
                 raise
+            rescue     
             end
         end
     end
