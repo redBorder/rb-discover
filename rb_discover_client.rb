@@ -18,7 +18,7 @@
 require "prettyprint"
 require 'getopt/std'
 require 'yaml'
-require 'json' 
+require 'json'
 require 'tempfile'
 require 'netaddr'
 require 'symmetric-encryption'
@@ -45,11 +45,11 @@ cdomain="redborder.cluster" if cdomain.nil? or cdomain==""
 def usage()
   printf("INFO: rb_discover_client.rb [-h][-r <ip>][-s][-c][-m] \n")
   printf("   -h       print this help\n")
-  printf("   -r <ip>  connect unicast instead of broadcast\n")
-  printf("   -s       show only server\n")
+  printf("   -r <ip>  connect to remote server (unicast) instead of broadcast\n")
+  printf("   -s       quiet mode. Show only server\n")
   printf("   -m       do no create master\n")
   printf("   -f       force\n")
-  printf("   -c       discover remote server and connect to it if it is available\n")
+  printf("   -c       auto-config. Discover remote server and try to connect if it is available\n")
   exit 1
 end
 
@@ -57,6 +57,7 @@ opt = Getopt::Std.getopts("hscr:mf")
 usage if opt["h"]
 config=opt["c"]
 
+# Check if node is configured yet
 if opt["c"] and File.exists?CLUSTERFILE and File.exists?CLIENTPEM and opt["f"].nil?
     p "This node is already configured!!"
     exit 1
@@ -68,17 +69,18 @@ max_counter=600
 final_chef_server=opt["r"]
 ret_code=0
 forcefinish=false
-  
+
 p "Querying server (#{final_chef_server.nil? ? "broadcast" : final_chef_server }) ..." if opt["s"].nil?
 
 while server_data["installed"]!=true and server_data["ready"]!=true and counter<max_counter and !forcefinish
     client_data={"hello"=> RANDOM_STR, "only_ready" => final_chef_server.nil?, "hostname" => `hostname -s`.chomp, "cdomain" => cdomain}.to_json
+    # Query to discover server
     result = UDPPing.query_server(client_data, final_chef_server, SERVER_LISTEN_PORT) do |data, server_ip|
         if final_chef_server.nil?
             p "redBorder server founded on #{server_ip}" if opt["s"].nil?
             final_chef_server=server_ip
         end
-        if config.nil?
+        if config.nil? # Not Auto-config
             if opt["s"]
                 puts "#{data["chef_server"]}\n"
             else
@@ -91,23 +93,25 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
             else
                 ret_code=3
             end
-        else
+        else # Auto-config
             if data["client_msg"]==client_data
                 if data["installed"] and data["ready"] and data["chef_server"]
                     if File.exists?'/etc/redborder/manager_mode'
-                        default_mode = File.open('/etc/redborder/manager_mode', &:readline).strip 
+                        default_mode = File.open('/etc/redborder/manager_mode', &:readline).strip
                     elsif File.exists?'/etc/chef/initialrole'
-                        default_mode = File.open('/etc/chef/initialrole', &:readline).strip 
+                        default_mode = File.open('/etc/chef/initialrole', &:readline).strip
                     else
-                        default_mode = "nginx" 
+                        default_mode = "nginx"
                     end
-                    
+
                     default_mode="nginx" if default_mode=="master"
-                    
+
                     forcefinish=true
                     system("name=$(hostname); [ \"x$name\" == \"xrbmanager\" ] && hostname \"rb#{rand(36**10).to_s(36)}\" ")
                     file = Tempfile.new('rb_discover_client')
                     File.open(file.path, 'w') { |file| file.write(data["private_rsa"])}
+          
+                    # Node register using rb_cluster_register.sh
                     system("ldconfig; source /etc/profile.d/redBorder-* /etc/profile.d/rvm.sh; /usr/bin/rb_cluster_register.sh '#{data["chef_server"]}' '#{default_mode}' #{file.path}")
                     file.close
                     file.unlink
@@ -116,8 +120,8 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                 p "ERROR: invalid hello message from #{server_ip}"
             end
         end
-    end
-    
+    end # end do
+
     if config.nil?
         counter=max_counter
     elsif !forcefinish
@@ -133,34 +137,34 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                 p "Waiting for #{final_chef_server} to become active (#{counter}/#{max_counter}). Sleeping #{s} seconds"
                 sleep s
             end
-        else 
+        else
             # We haven't found any master
-            # We try to detect using arpm 
+            # We try to detect using arpm
             create_master=true
-            
+
             if File.exists?"/usr/bin/arp-scan"
                 if File.exists?'/etc/redborder/manager_mode'
-                    local_mode = File.open('/etc/redborder/manager_mode', &:readline).strip 
+                    local_mode = File.open('/etc/redborder/manager_mode', &:readline).strip
                 elsif File.exists?'/etc/chef/initialrole'
-                    local_mode = File.open('/etc/chef/initialrole', &:readline).strip 
+                    local_mode = File.open('/etc/chef/initialrole', &:readline).strip
                 else
                     local_mode = "core"
                 end
-                
-                begin 
+
+                begin
                     netbond=`ip a s bond1 2>/dev/null|grep brd|grep inet|head -n 1 | awk '{print $2}'`.chomp
                     if netbond!=""
-                        netbond=NetAddr::CIDR.create(netbond) 
+                        netbond=NetAddr::CIDR.create(netbond)
                         p "Scanning network via ARP request"
                         ips=`/usr/bin/arp-scan -x -q -I bond1 #{netbond.to_s} | awk '{print $1}'`.split("\n")
                         found=false
                         candidates=[]
                         allcandidates=[]
-                        
+
                         allcandidates << NetAddr::CIDR.create(netbond.ip).to_i
                         candidates << NetAddr::CIDR.create(netbond.ip).to_i if (local_mode=="core" or local_mode=="coreriak" or local_mode=="coreplus" or local_mode=="corezk" or local_mode=="master")
-                        
-                        ips.each do |x| 
+
+                        ips.each do |x|
                             if !found
                                 system("/usr/bin/rb_discover_client.rb -r #{x}")
                                 discover_ret=$?.exitstatus
@@ -177,9 +181,9 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                                 end
                             end
                         end
-                        
+
                         candidates = allcandidates if candidates.size == 0
-                        
+
                         if !found and candidates.size>1
                             if candidates.sort.first == NetAddr::CIDR.create(netbond.ip).to_i
                                 create_master=true
@@ -189,11 +193,12 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                             end
                         end
                     end
-                rescue 
+                rescue
                     create_master=true
                 end
             end
-            
+
+            # Master node configuration
             if create_master
                 counter=max_counter
                 if opt["m"].nil?
