@@ -36,17 +36,22 @@ def local_ip?(ip)
 end
 
 USERDATA="/var/lib/cloud/instance/user-data.txt"
+discover_net = nil
+#discover_dev = nil
 
 if File.exist?USERDATA
     File.open(USERDATA).each do |line|
         unless line.match(/^\s*DISCOVER_KEY=(?<key>[^\s]*)\s*$/).nil?
             SymmetricEncryption.cipher = SymmetricEncryption::Cipher.new(:key=>line.match(/^\s*DISCOVER_KEY=(?<key>[^\s]*)\s*$/)[:key],:cipher_name => 'aes-128-cbc')
         end
+        unless line.match(/^\s*DISCOVER_NET=(?<key>[^\s]*)\s*$/).nil?
+            discover_net = line.match(/^\s*DISCOVER_NET=(?<net>[^\s]*)\s*$/)[:net]
+        end
     end
 end
 
 cdomain = File.read("/etc/redborder/cdomain").split("\n").first if File.exist?"/etc/redborder/cdomain"
-cdomain="redborder.cluster" if cdomain.nil? or cdomain==""
+cdomain = "redborder.cluster" if cdomain.nil? or cdomain == ""
 
 def usage()
   printf("INFO: rb_discover_server.rb [-h][-o][-d][ -c config_file ]\n")
@@ -79,8 +84,18 @@ config["answer"] = {} if config["answer"].nil?
 
 if opt["o"]
     accept_local_request = false
-    local_client_ip=`ip a s bond1 2>/dev/null|grep brd|grep inet|head -n 1 | awk '{print $2}'|sed 's|/.*||'`.chomp
-    # better: System.get_all_ifaddrs?
+    if discover_net.nil?
+        # back compatibility
+        local_client_ip = `ip a s bond1 2>/dev/null|grep brd|grep inet|head -n 1 | awk '{print $2}'|sed 's|/.*||'`.chomp
+    else
+        # Searching device that owns to the discovery network
+        System.get_all_ifaddrs.each do |netdev|
+            if IPAddr.new(discover_net).include?(netdev[:inet_addr])
+                #discover_dev = netdev
+                local_client_ip = netdev[:inet_addr]
+            end
+        end
+    end
 end
 
 thread = UDPPing.start_service_announcer(port) do |client_msg, client_ip|

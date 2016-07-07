@@ -10,7 +10,7 @@ License: AGPL 3.0
 URL: https://github.com/redBorder/rb-discover
 Source0: %{name}-%{version}.tar.gz
 
-Requires: bash rvm redborder-common
+Requires: bash rvm redborder-common arp-scan
 
 %description
 %{summary}

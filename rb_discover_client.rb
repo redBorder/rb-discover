@@ -22,6 +22,8 @@ require 'json'
 require 'tempfile'
 require 'netaddr'
 require 'symmetric-encryption'
+require 'system/getifaddrs'
+require 'arp_scan'
 
 require File.join(ENV['RBDIR'].nil? ? '/usr/lib/redborder' : ENV['RBDIR'],'lib/udp_ping')
 
@@ -31,10 +33,26 @@ CLUSTERFILE="/etc/redborder/cluster-installed.txt"
 CLIENTPEM="/etc/chef/client.pem"
 USERDATA="/var/lib/cloud/instance/user-data.txt"
 
+discover_net = nil
+discover_dev = nil
+
+# Try to initialize Encryption
 if File.exist?USERDATA
     File.open(USERDATA).each do |line|
         unless line.match(/^\s*DISCOVER_KEY=(?<key>[^\s]*)\s*$/).nil?
             SymmetricEncryption.cipher = SymmetricEncryption::Cipher.new(:key=>line.match(/^\s*DISCOVER_KEY=(?<key>[^\s]*)\s*$/)[:key],:cipher_name => 'aes-128-cbc')
+        end
+        unless line.match(/^\s*DISCOVER_NET=(?<key>[^\s]*)\s*$/).nil?
+            discover_net = line.match(/^\s*DISCOVER_NET=(?<net>[^\s]*)\s*$/)[:net]
+        end
+    end
+end
+
+# Initialize network device
+unless discover_net.nil?
+    System.get_all_ifaddrs.each do |netdev|
+        if IPAddr.new(discover_net).include?(netdev[:inet_addr])
+            discover_dev = netdev
         end
     end
 end
@@ -55,7 +73,7 @@ end
 
 opt = Getopt::Std.getopts("hscr:mf")
 usage if opt["h"]
-config=opt["c"]
+autoconfig=opt["c"]
 
 # Check if node is configured yet
 if opt["c"] and File.exists?CLUSTERFILE and File.exists?CLIENTPEM and opt["f"].nil?
@@ -80,7 +98,8 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
             p "redBorder server founded on #{server_ip}" if opt["s"].nil?
             final_chef_server=server_ip
         end
-        if config.nil? # Not Auto-config
+        if autoconfig.nil? # Non Auto-config
+            # In this mode, we will print some information and a return code that explains what kind of manager we had found
             if opt["s"]
                 puts "#{data["chef_server"]}\n"
             else
@@ -94,8 +113,9 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                 ret_code=3
             end
         else # Auto-config
-            if data["client_msg"]==client_data
+            if data["client_msg"]==client_data # check for data integrity
                 if data["installed"] and data["ready"] and data["chef_server"]
+                    # found a manager in master mode
                     if File.exists?'/etc/redborder/manager_mode'
                         default_mode = File.open('/etc/redborder/manager_mode', &:readline).strip
                     elsif File.exists?'/etc/chef/initialrole'
@@ -103,15 +123,18 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                     else
                         default_mode = "nginx"
                     end
-
+                    
+                    # we need to setup as nginx if my default mode is master due to founded a master in the network
                     default_mode="nginx" if default_mode=="master"
 
-                    forcefinish=true
-                    system("name=$(hostname); [ \"x$name\" == \"xrbmanager\" ] && hostname \"rb#{rand(36**10).to_s(36)}\" ")
+                    forcefinish=true # we found finally a master, no needs to going on
+                    system("name=$(hostname); [ \"x$name\" == \"xrbmanager\" ] && hostname \"rb#{rand(36**10).to_s(36)}\" ") # setting hostname to an auto-hostname different from default
+
+                    # we need to save the RSA key provided by the master
                     file = Tempfile.new('rb_discover_client')
                     File.open(file.path, 'w') { |file| file.write(data["private_rsa"])}
           
-                    # Node register using rb_cluster_register.sh
+                    # Node register using rb_cluster_register.sh with the provided RSA key
                     system("ldconfig; source /etc/profile.d/redBorder-* /etc/profile.d/rvm.sh; /usr/bin/rb_cluster_register.sh '#{data["chef_server"]}' '#{default_mode}' #{file.path}")
                     file.close
                     file.unlink
@@ -120,10 +143,10 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
                 p "ERROR: invalid hello message from #{server_ip}"
             end
         end
-    end # end do
+    end # end do code from UDPPing.query_server
 
-    if config.nil?
-        counter=max_counter
+    if autoconfig.nil? # Non Auto-config
+        counter=max_counter # better make a break?
     elsif !forcefinish
         if result or !final_chef_server.nil?
             # we have founded redBorder server. checking if it is ready
@@ -139,64 +162,74 @@ while server_data["installed"]!=true and server_data["ready"]!=true and counter<
             end
         else
             # We haven't found any master
-            # We try to detect using arpm
+            # We try to detect using arp scan
             create_master=true
 
-            if File.exists?"/usr/bin/arp-scan"
-                if File.exists?'/etc/redborder/manager_mode'
-                    local_mode = File.open('/etc/redborder/manager_mode', &:readline).strip
-                elsif File.exists?'/etc/chef/initialrole'
-                    local_mode = File.open('/etc/chef/initialrole', &:readline).strip
+            #if File.exists?"/usr/bin/arp-scan"
+            if File.exists?'/etc/redborder/manager_mode'
+                local_mode = File.open('/etc/redborder/manager_mode', &:readline).strip
+            elsif File.exists?'/etc/chef/initialrole'
+                local_mode = File.open('/etc/chef/initialrole', &:readline).strip
+            else
+                local_mode = "core"
+            end
+
+            begin
+                if discover_net.nil?
+                    netbond = `ip a s bond1 2>/dev/null|grep brd|grep inet|head -n 1 | awk '{print $2}'`.chomp
                 else
-                    local_mode = "core"
+                    netbond = discover_dev[:inet_addr]
                 end
+                if netbond!=""
+                    netbond=NetAddr::CIDR.create(netbond)
+                    p "Scanning network via ARP request"
+                    #ips=`/usr/bin/arp-scan -x -q -I bond1 #{netbond.to_s} | awk '{print $1}'`.split("\n")
+                    report_arpscan = ARPScan("-I bond1 #{netbond.to_s}")
+                    found=false
+                    candidates=[]
+                    allcandidates=[]
 
-                begin
-                    netbond=`ip a s bond1 2>/dev/null|grep brd|grep inet|head -n 1 | awk '{print $2}'`.chomp
-                    if netbond!=""
-                        netbond=NetAddr::CIDR.create(netbond)
-                        p "Scanning network via ARP request"
-                        ips=`/usr/bin/arp-scan -x -q -I bond1 #{netbond.to_s} | awk '{print $1}'`.split("\n")
-                        found=false
-                        candidates=[]
-                        allcandidates=[]
+                    allcandidates << NetAddr::CIDR.create(netbond.ip).to_i
+                    candidates << NetAddr::CIDR.create(netbond.ip).to_i if (local_mode=="core" or local_mode=="coreriak" or local_mode=="coreplus" or local_mode=="corezk" or local_mode=="master")
 
-                        allcandidates << NetAddr::CIDR.create(netbond.ip).to_i
-                        candidates << NetAddr::CIDR.create(netbond.ip).to_i if (local_mode=="core" or local_mode=="coreriak" or local_mode=="coreplus" or local_mode=="corezk" or local_mode=="master")
-
-                        ips.each do |x|
-                            if !found
-                                system("/usr/bin/rb_discover_client.rb -r #{x}")
-                                discover_ret=$?.exitstatus
-                                if discover_ret == 0
-                                    p "Founded redBorder node on #{x}"
-                                    final_chef_server=x
-                                    found=true
-                                    create_master=false
-                                elsif discover_ret == 2
-                                    candidates << NetAddr::CIDR.create(x).to_i
-                                    allcandidates << NetAddr::CIDR.create(x).to_i
-                                elsif discover_ret == 3
-                                    allcandidates << NetAddr::CIDR.create(x).to_i
-                                end
-                            end
-                        end
-
-                        candidates = allcandidates if candidates.size == 0
-
-                        if !found and candidates.size>1
-                            if candidates.sort.first == NetAddr::CIDR.create(netbond.ip).to_i
-                                create_master=true
-                            else
-                                final_chef_server=NetAddr::CIDR.create(candidates.sort.first).ip
+                    report_arpscan.hosts.each do |host|
+                        if !found
+                            system("/usr/bin/rb_discover_client.rb -r #{host.ip_addr}")
+                            discover_ret=$?.exitstatus
+                            if discover_ret == 0
+                                # founded a master node
+                                p "Founded redBorder node on #{host.ip_addr}"
+                                final_chef_server=host.ip_addr
+                                found=true
                                 create_master=false
+                            elsif discover_ret == 2
+                                # founded a core node ... posible candidate
+                                candidates << NetAddr::CIDR.create(host.ip_addr).to_i
+                                allcandidates << NetAddr::CIDR.create(host.ip_addr).to_i
+                            elsif discover_ret == 3
+                                # founded normal node
+                                allcandidates << NetAddr::CIDR.create(host.ip_addr).to_i
                             end
                         end
                     end
-                rescue
-                    create_master=true
+
+                    candidates = allcandidates if candidates.size == 0
+
+                    if !found and candidates.size>1
+                        if candidates.sort.first == NetAddr::CIDR.create(netbond.ip).to_i
+                            # if we are the first in te list of candidates, we are the new master
+                            create_master=true
+                        else
+                            # the first candidate in the list will be the new chef server
+                            final_chef_server=NetAddr::CIDR.create(candidates.sort.first).ip
+                            create_master=false
+                        end
+                    end
                 end
+            rescue
+                create_master=true
             end
+            #end
 
             # Master node configuration
             if create_master
